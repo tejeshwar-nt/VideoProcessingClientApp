@@ -1,0 +1,12 @@
+services:
+  popsign-video-processing-server:
+    build: .
+    container_name: popsign-video-processing-server
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./state.json:/app/state.json
+      - /data/raw/popsign/v2/2026-01-22:/data/raw/popsign/v2/2026-01-22
+      - /data/processed/popsign_v2/mltk-hands/popsign_v2/reference:/app/data/processed/popsign_v2/mltk-hands/popsign_v2/reference:ro
+      - ./uploads/hdf5:/app/uploads/hdf5
+    restart: unless-stopped
