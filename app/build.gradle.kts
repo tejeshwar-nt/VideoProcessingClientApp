@@ -42,6 +42,7 @@ android {
 }
 
 dependencies {
+    implementation(files("libs/extraction_pipeline.aar"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
 

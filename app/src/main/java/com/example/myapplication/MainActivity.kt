@@ -1,5 +1,6 @@
 package com.example.myapplication
 
+import android.media.MediaExtractor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,12 +21,26 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import edu.gatech.ccg.gtk.extraction.ExtractionPipeline
 import java.io.File
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        init {
+            System.loadLibrary("mediapipe_jni")
+        }
+    }
+
+    private lateinit var pipeline: ExtractionPipeline
+    private var videosProcessed = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        com.google.mediapipe.framework.AndroidAssetUtil.initializeNativeAssetManager(this.baseContext)
+        cacheDir.listFiles()?.forEach { it.delete() }
+        pipeline = ExtractionPipeline()
         setContent {
             val ctx = LocalContext.current
 
@@ -95,12 +110,17 @@ class MainActivity : ComponentActivity() {
                 return outFile
             }
 
-            // placeholder processing step
             suspend fun processVideo(file: File): File {
-                // TODO: run MediaPipe processing and write results to hdf5File
-                delay(500)
                 val hdf5File = File(ctx.filesDir, file.nameWithoutExtension + ".h5")
-                if (!hdf5File.exists()) hdf5File.createNewFile()
+                withContext(Dispatchers.Default) {
+                    val start = System.currentTimeMillis()
+                    android.util.Log.d("Pipeline", "Starting processing: ${file.name}")
+                    PhoneIdStore.setProcessingVideo(ctx, file.name)
+                    pipeline.process(file.absolutePath, hdf5File.absolutePath)
+                    PhoneIdStore.setProcessingVideo(ctx, null)
+                    val elapsed = System.currentTimeMillis() - start
+                    android.util.Log.d("Pipeline", "Finished processing: ${file.name} in ${elapsed}ms (total this session: ${++videosProcessed})")
+                }
                 return hdf5File
             }
 
@@ -125,6 +145,16 @@ class MainActivity : ComponentActivity() {
                     var claimedVideoId: String? = null
                     try {
                         val phoneId = ensurePhoneId()
+
+                        val crashedVideo = PhoneIdStore.getProcessingVideo(ctx)
+                        if (crashedVideo != null) {
+                            android.util.Log.e("Pipeline", "Previous run crashed while processing: $crashedVideo")
+                            PhoneIdStore.setProcessingVideo(ctx, null)
+                            // delete partial files from phone
+                            File(ctx.filesDir, crashedVideo).delete()
+                            File(ctx.filesDir, File(crashedVideo).nameWithoutExtension + ".h5").delete()
+                        }
+
                         status = "Worker running (phoneId=$phoneId)"
 
                         // heartbeat
@@ -175,13 +205,18 @@ class MainActivity : ComponentActivity() {
                         ApiClient.api.complete(CompleteBody(phoneId, videoId))
                         claimedVideoId = null
 
-                        status = "Done $videoId. Claiming next..."
+                        // free up storage
+                        file.delete()
+                        hdf5File.delete()
+
+                        status = "Done $videoId. Claiming next."
                     } catch (e: Exception) {
                         val vid = claimedVideoId
                         if (vid != null) {
                             try {
-                                // remove partial file if it exists
+                                // remove partial files if they exist
                                 File(ctx.filesDir, vid).delete()
+                                File(ctx.filesDir, File(vid).nameWithoutExtension + ".h5").delete()
                                 // Mark job failed so it can be retried
                                 val reason = "${e::class.simpleName ?: e.javaClass.simpleName}: ${e.message ?: "Unknown error"}"
                                 val pid = PhoneIdStore.get(ctx)
@@ -201,6 +236,7 @@ class MainActivity : ComponentActivity() {
             MaterialTheme {
                 Surface {
                     Column {
+                        Text("Device ID: ${PhoneIdStore.get(ctx) ?: "Not registered"}")
                         Text(status)
 
                         if (currentVideo != null) {
@@ -216,7 +252,9 @@ class MainActivity : ComponentActivity() {
                         }
 
                         Button(onClick = {
-                            ctx.filesDir.listFiles()?.forEach { it.delete() }
+                            ctx.filesDir.listFiles()
+                                ?.filter { it.extension == "mp4" || it.extension == "h5" }
+                                ?.forEach { it.delete() }
                             status = "All videos wiped."
                         }) {
                             Text("Wipe downloaded videos")

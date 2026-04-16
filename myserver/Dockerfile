@@ -1,5 +1,7 @@
 FROM node:20-alpine
 
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
 COPY package*.json ./
@@ -7,7 +9,7 @@ RUN npm install --production
 
 COPY index.js ./
 
-RUN mkdir -p uploads && echo '{"phones":{},"jobs":{}}' > state.json
+RUN mkdir -p uploads/hdf5
 
 EXPOSE 3000
 

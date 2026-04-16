@@ -5,7 +5,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./state.json:/app/state.json
+      - ./data:/app/data
       - /data/raw/popsign/v2/2026-01-22:/data/raw/popsign/v2/2026-01-22
       - /data/processed/popsign_v2/mltk-hands/popsign_v2/reference:/app/data/processed/popsign_v2/mltk-hands/popsign_v2/reference:ro
       - ./uploads/hdf5:/app/uploads/hdf5
