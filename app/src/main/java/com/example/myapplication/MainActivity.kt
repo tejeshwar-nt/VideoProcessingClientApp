@@ -39,7 +39,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         com.google.mediapipe.framework.AndroidAssetUtil.initializeNativeAssetManager(this.baseContext)
-        cacheDir.listFiles()?.forEach { it.delete() }
         pipeline = ExtractionPipeline()
         setContent {
             val ctx = LocalContext.current
@@ -153,6 +152,8 @@ class MainActivity : ComponentActivity() {
                             // delete partial files from phone
                             File(ctx.filesDir, crashedVideo).delete()
                             File(ctx.filesDir, File(crashedVideo).nameWithoutExtension + ".h5").delete()
+                            // wipe cache to clear any corrupted pipeline asset extractions
+                            ctx.cacheDir.listFiles()?.forEach { it.delete() }
                         }
 
                         status = "Worker running (phoneId=$phoneId)"
